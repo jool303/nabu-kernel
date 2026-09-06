@@ -1,4 +1,4 @@
-name: Build Nabu 4.14 ResuKISU‑SusFS‑KPM
+name: Build Nabu 4.14 ResuKISU-SusFS-KPM
 on:
   workflow_dispatch:
 
@@ -14,7 +14,7 @@ jobs:
           sudo apt update
           sudo apt install -y git make gcc libssl-dev bc flex bison libelf-dev zip wget unzip python3
 
-      - name: Clone Xiaomi nabu 4.14 kernel source(nabu‑q‑oss)
+      - name: Clone Xiaomi nabu 4.14 kernel source
         run: |
           git clone https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b nabu-q-oss kernel
           cd kernel
@@ -26,13 +26,9 @@ jobs:
       - name: Patch Makefile inject modules
         run: |
           cd kernel
-          cat >> kernel/Makefile <<'EOF'
-obj-$(CONFIG_RESUKISU) += resukisu/
-obj-$(CONFIG_SUSFS) += susfs/
-obj-$(CONFIG_KPM) += kpm/
-EOF
+          printf 'obj-$$(CONFIG_RESUKISU) += resukisu/\nobj-$$(CONFIG_SUSFS) += susfs/\nobj-$$(CONFIG_KPM) += kpm/\n' >> kernel/Makefile
 
-      - name: Apply set_memory backport patch(4.14 KPM must‑have)
+      - name: Apply set_memory backport patch
         run: |
           cd kernel
           wget https://raw.githubusercontent.com/5ec1cff/KernelPatchModules/nongki/patches/4.14/set_memory_backport.patch
@@ -41,33 +37,16 @@ EOF
       - name: Modify nabu_defconfig
         run: |
           cd kernel
-          cat >> arch/arm64/configs/nabu_defconfig <<'EOF'
-CONFIG_RESUKISU=y
-CONFIG_RESUKISU_MANUAL_HOOK=y
-RESUKISU_ALLOW_SYS_CALL=y
-RESUKISU_DEBUG=n
+          printf 'CONFIG_RESUKISU=y\nCONFIG_RESUKISU_MANUAL_HOOK=y\nRESUKISU_ALLOW_SYS_CALL=y\nRESUKISU_DEBUG=n\nCONFIG_SUSFS=y\nCONFIG_SUSFS_MANUAL_HOOK=y\nCONFIG_SUSFS_HIDE_KSU=y\nCONFIG_KPM=y\nCONFIG_KALLSYMS=y\nCONFIG_KALLSYMS_ALL=y\nCONFIG_KALLSYMS_EXTRA_PASS=y\nCONFIG_MODULES=y\nCONFIG_MODULE_UNLOAD=y\n' >> arch/arm64/configs/nabu_defconfig
 
-CONFIG_SUSFS=y
-CONFIG_SUSFS_MANUAL_HOOK=y
-CONFIG_SUSFS_HIDE_KSU=y
-
-CONFIG_KPM=y
-CONFIG_KALLSYMS=y
-CONFIG_KALLSYMS_ALL=y
-CONFIG_KALLSYMS_EXTRA_PASS=y
-
-CONFIG_MODULES=y
-CONFIG_MODULE_UNLOAD=y
-EOF
-
-      - name: Download clang‑r383902
+      - name: Download clang-r383902 toolchain
         run: |
           wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-11.0.0_r37/clang-r383902.tar.gz -O clang.tar.gz
           mkdir toolchain
           tar xf clang.tar.gz -C toolchain
           echo "PATH=$PWD/toolchain/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Kernel compile
+      - name: Compile kernel
         run: |
           cd kernel
           export ARCH=arm64
@@ -76,31 +55,30 @@ EOF
           make nabu_defconfig
           make -j$(nproc) CC=clang LD=ld.lld
 
-      - name: Download mkbootimg tools
+      - name: Install mkbootimg
         run: |
           wget https://github.com/osm0sis/mkbootimg/archive/refs/heads/master.zip -O mkboot.zip
           unzip mkboot.zip
           cd mkbootimg-master
-          python3 setup.py install
+          sudo python3 setup.py install
 
       - name: Pack boot.img
         run: |
           cd kernel
           mkbootimg \
-          --kernel out/arch/arm64/boot/Image \
-          --dtb out/arch/arm64/boot/dts/vendor/qcom/sm8150-nabu.dtb \
-          --dtbo out/arch/arm64/boot/dtbo.img \
-          --base 0x00000000 \
-          --kernel_offset 0x00008000 \
-          --ramdisk_offset 0x01000000 \
-          --dtb_offset 0x01f00000 \
-          --tags_offset 0x00000100 \
-          --pagesize 4096 \
-          -o ../nabu-414-resukisu-susfs-kpm-boot.img
+            --kernel out/arch/arm64/boot/Image \
+            --dtb out/arch/arm64/boot/dts/vendor/qcom/sm8150-nabu.dtb \
+            --dtbo out/arch/arm64/boot/dtbo.img \
+            --base 0x00000000 \
+            --kernel_offset 0x00008000 \
+            --ramdisk_offset 0x01000000 \
+            --dtb_offset 0x01f00000 \
+            --tags_offset 0x00000100 \
+            --pagesize 4096 \
+            -o ../nabu-414-resukisu-susfs-kpm-boot.img
 
       - name: Upload boot.img artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Nabu‑Custom‑Boot
+          name: Nabu-Custom-Boot
           path: nabu-414-resukisu-susfs-kpm-boot.img
-
